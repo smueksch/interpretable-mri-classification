@@ -1,3 +1,13 @@
+## Custom ##
+
+# Python venv.
+ml4hc-p3/
+
+# Checkpoints with model states and logs.
+checkpoints/
+
+## Auto-Generated ##
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
