@@ -5,6 +5,7 @@ from argparse import ArgumentParser
 from typing import Dict, Any
 
 from utils import set_seeds, init_id, init_argument_parser, init_logger
+from data import get_radiomics_dataset
 
 
 def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
@@ -38,7 +39,20 @@ def main() -> None:
     logger = init_logger(path_to_log=build_log_file_path(cfg))
     logger.info(pprint.pformat(cfg, indent=4))
 
-    # TODO: add code to run task here.
+    logger.info("Loading radiomics dataset...")
+    data_dir = os.path.join(cfg["data"], "radiomics")
+    X_train, y_train, X_valid, y_valid, X_test, y_test = get_radiomics_dataset(
+        data_dir=data_dir
+    )
+    logger.info("Radiomics dataset loaded!")
+
+    # TODO: add code to run task here, current code is just dummy for testing.
+    logger.info("X_train shape: %s", X_train.shape)
+    logger.info("y_train shape: %s", y_train.shape)
+    logger.info("X_valid shape: %s", X_valid.shape)
+    logger.info("y_valid shape: %s", y_valid.shape)
+    logger.info("X_test shape: %s", X_test.shape)
+    logger.info("y_test shape: %s", y_test.shape)
 
 
 if "__main__" == __name__:
