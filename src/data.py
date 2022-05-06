@@ -1,35 +1,38 @@
 import os
 import logging
 from pathlib import Path
+from typing import Tuple, Dict, Any, Optional
 
 import pandas as pd
 import numpy as np
-
 import torch
 from torchvision.datasets import ImageFolder
 from torchvision import transforms
 from torch.utils.data import random_split
+from sklearn.utils.class_weight import compute_class_weight
 
 
-def get_img_dataset(data_dir: str, logger: logging.Logger, transform=None):
+def get_img_dataset(
+    data_dir: str, logger: logging.Logger, transform=None
+) -> Tuple[
+    torch.utils.data.dataset.Subset,
+    torch.utils.data.dataset.Subset,
+    torch.utils.data.dataset.Subset,
+]:
     # Define data transform
     train_transform = []
     if transform is not None:
         train_transform += transform
     train_transform += [
         transforms.Resize(128),  # resize shortest side to 128 pixels
-        transforms.CenterCrop(
-            128
-        ),  # crop longest side to 128 pixels at center
+        transforms.CenterCrop(128),  # crop longest side to 128 pixels at center
         transforms.ToTensor(),  # convert PIL image to tensor
     ]
     train_transform = transforms.Compose(train_transform)
     test_transform = transforms.Compose(
         [
             transforms.Resize(128),  # resize shortest side to 128 pixels
-            transforms.CenterCrop(
-                128
-            ),  # crop longest side to 128 pixels at center
+            transforms.CenterCrop(128),  # crop longest side to 128 pixels at center
             transforms.ToTensor(),  # convert PIL image to tensor
         ]
     )
@@ -62,6 +65,51 @@ def get_img_dataset(data_dir: str, logger: logging.Logger, transform=None):
     )[1:]
 
     return train_dataset, val_dataset, test_dataset
+
+
+def get_img_data_loaders(
+    cfg: dict,
+    data_dir: str,
+    logger: logging.Logger,
+    additional_train_transforms=None,
+    shuffle_train: bool = True,
+) -> Tuple[
+    torch.utils.data.DataLoader,
+    torch.utils.data.DataLoader,
+    torch.utils.data.DataLoader,
+    torch.Tensor,
+]:
+    def get_img_data_loaders_helper(dataset, shuffle):
+        return torch.utils.data.DataLoader(
+            train_dataset,
+            batch_size=cfg["batch_size"],
+            shuffle=shuffle,
+            num_workers=cfg["num_workers"],
+            pin_memory=False,
+            drop_last=False,
+        )
+
+    train_dataset, val_dataset, test_dataset = get_img_dataset(
+        data_dir=data_dir, logger=logger, transform=additional_train_transforms
+    )
+
+    # compute class weights
+    train_labels = np.array([y for X, y in train_dataset])
+    class_weights = torch.tensor(
+        compute_class_weight(
+            class_weight="balanced", classes=np.unique(train_labels), y=train_labels,
+        ),
+        dtype=torch.float,
+        device=cfg["device"],
+    )
+
+    train_dataloader = get_img_data_loaders_helper(
+        dataset=train_dataset, shuffle=shuffle_train
+    )
+    val_dataloader = get_img_data_loaders_helper(dataset=val_dataset, shuffle=False)
+    test_dataloader = get_img_data_loaders_helper(dataset=test_dataset, shuffle=False)
+
+    return train_dataloader, val_dataloader, test_dataloader, class_weights
 
 
 def get_radiomics_dataset(data_dir: str):

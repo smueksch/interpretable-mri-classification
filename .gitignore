@@ -1,7 +1,7 @@
 ## Custom ##
 
-# Python venv.
-ml4hc-p3/
+# VS Code
+.vscode
 
 # Checkpoints with model states and logs.
 checkpoints/
