@@ -16,6 +16,54 @@ from data import get_radiomics_dataset
 
 def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
     """Add task-specific CLI arguments to a basic CLI argument parser."""
+    parser.add_argument(
+        "--n_estimators",
+        type=int,
+        default=800,
+        help="Number of gradient boosted trees.",
+    )
+    parser.add_argument(
+        "--max_depth",
+        type=int,
+        default=4,
+        help="Max. tree depth of base learners.",
+    )
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=0.01,
+        help="Boosting learning rate.",
+    )
+    parser.add_argument(
+        "--gamma",
+        type=float,
+        default=1.0,
+        help="Min. loss to make further partition on leaf node.",
+    )
+    parser.add_argument(
+        "--subsample",
+        type=float,
+        default=1.0,
+        help="Subsample ratio of training instance.",
+    )
+    parser.add_argument(
+        "--reg_alpha",
+        type=float,
+        default=1e-3,
+        help="L1 regularization term on weights.",
+    )
+    parser.add_argument(
+        "--reg_lambda",
+        type=float,
+        default=1e-3,
+        help="L2 regularization term on weights.",
+    )
+    parser.add_argument(
+        "--grid_search",
+        action="store_true",
+        help="If set, hyperparameter grid search for XGBoost classifier will"
+        + " be performed.",
+    )
     return parser
 
 
@@ -111,23 +159,35 @@ def main() -> None:
     logger.info("X_test shape: %s", X_test.shape)
     logger.info("y_test shape: %s", y_test.shape)
 
-    X_train_valid, y_train_valid = combine_train_and_valid(
-        X_train=X_train, y_train=y_train, X_valid=X_valid, y_valid=y_valid
-    )
+    if cfg["grid_search"]:
+        X_train_valid, y_train_valid = combine_train_and_valid(
+            X_train=X_train, y_train=y_train, X_valid=X_valid, y_valid=y_valid
+        )
 
-    logger.info("X_train_valid shape: %s", X_train.shape)
-    logger.info("y_train_valid shape: %s", y_train.shape)
+        logger.info("X_train_valid shape: %s", X_train.shape)
+        logger.info("y_train_valid shape: %s", y_train.shape)
 
-    logger.info("Starting grid search for XGBoost Classifier...")
-    grid_search = search_grid(cfg, X_train_valid, y_train_valid)
-    logger.info("Grid search complete!")
+        logger.info("Starting grid search for XGBoost Classifier...")
+        grid_search = search_grid(cfg, X_train_valid, y_train_valid)
+        logger.info("Grid search complete!")
 
-    xgbc = grid_search.best_estimator_
+        xgbc = grid_search.best_estimator_
 
-    logger.info(
-        "Best hyperparameter settings: %s",
-        pprint.pformat(grid_search.best_params_, indent=4),
-    )
+        logger.info(
+            "Best hyperparameter settings: %s",
+            pprint.pformat(grid_search.best_params_, indent=4),
+        )
+    else:
+        xgbc = XGBClassifier(
+            n_estimators=cfg["n_estimators"],
+            max_depth=cfg["max_depth"],
+            learning_rate=cfg["lr"],
+            gamma=cfg["gamma"],
+            subsample=cfg["subsample"],
+            reg_alpha=cfg["reg_alpha"],
+            reg_lambda=cfg["reg_lambda"],
+        )
+        xgbc.fit(X_train, y_train)
 
     important_features = select_important_features(
         X_train.columns.to_list(), xgbc.feature_importances_.tolist()
