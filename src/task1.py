@@ -1,13 +1,13 @@
 import os
 import pprint
 from argparse import ArgumentParser
+import pickle
 
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List
 
 import numpy as np
-import pandas as pd
 from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from xgboost.sklearn import XGBClassifier
 
 from utils import set_seeds, init_id, init_argument_parser, init_logger
@@ -67,12 +67,14 @@ def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
     return parser
 
 
+def build_checkpoints_path(cfg: Dict[str, Any]) -> str:
+    """Construct path to task 1 checkpoints folder from configuration."""
+    return os.path.join(cfg["checkpoints"], "task1")
+
+
 def build_log_file_path(cfg: Dict[str, Any]) -> str:
     """Construct path to log file from configuration."""
-    path = os.path.join(
-        cfg["checkpoints"],
-        "task1",
-    )
+    path = build_checkpoints_path(cfg)
     os.makedirs(path, exist_ok=True)
     file_path = os.path.join(path, f"experiment-{cfg['id']}.log")
     return file_path
@@ -88,131 +90,171 @@ def select_important_features(
     return {t[0]: t[1] for t in important_features if t[1] > 0.0}
 
 
-def combine_train_and_valid(
-    X_train: pd.DataFrame,
-    y_train: np.ndarray,
-    X_valid: pd.DataFrame,
-    y_valid: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray]:
-    X_train_valid = np.concatenate((X_train.to_numpy(), X_valid.to_numpy()))
-    y_train_valid = np.concatenate((y_train, y_valid))
-    return X_train_valid, y_train_valid
+def save_xgb_classifier(xgbc: XGBClassifier, model_path: str) -> None:
+    """Save XGBoost classifier to given path."""
+    with open(model_path, "wb") as f:
+        pickle.dump(obj=xgbc, file=f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def search_grid(
-    cfg: Dict[str, Any], X_train_valid: np.ndarray, y_train_valid: np.ndarray
-) -> GridSearchCV:
-    parameter_grid = {
-        "n_estimators": [700, 800, 900, 1000],
-        "max_depth": [3, 4],
-        "learning_rate": [0.01],
-        # "n_estimators": [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
-        # "max_depth": [3, 4, 5, 6],
-        # "learning_rate": [0.01, 0.05, 0.1],
-        # "gamma": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-        # "subsample": [0.7, 0.8, 0.9, 1.0],
-        # "reg_alpha": [1e-5, 1e-4, 1e-3],
-        # "reg_lambda": [0.1, 0.01, 1],
-    }
-
-    xgbc = XGBClassifier(n_jobs=16, random_state=cfg["seed"])
-
-    grid_search = GridSearchCV(
-        xgbc,
-        parameter_grid,
-        scoring="accuracy",
-        n_jobs=16,
-        refit=True,
-        cv=5,
-        verbose=4,
-        return_train_score=True,
-    )
-
-    grid_search.fit(X_train_valid, y_train_valid)
-    return grid_search
+def load_xgb_classifier(model_path: str) -> XGBClassifier:
+    """Load XGBoost classifier from given path."""
+    with open(model_path, "rb") as f:
+        model = pickle.load(file=f)
+    return model
 
 
-def main() -> None:
-    arg_parser = init_argument_parser()
-    arg_parser = extend_argument_parser(arg_parser)
+class Task1:
+    """Task 1 experiments."""
 
-    cfg = arg_parser.parse_args().__dict__
+    def __init__(self) -> None:
+        """Set up task 1 experiments."""
+        arg_parser = init_argument_parser()
+        arg_parser = extend_argument_parser(arg_parser)
 
-    set_seeds(cfg["seed"])
-    if cfg["id"] is None:
-        init_id(cfg)
+        self.cfg = arg_parser.parse_args().__dict__
 
-    logger = init_logger(path_to_log=build_log_file_path(cfg))
-    logger.info(pprint.pformat(cfg, indent=4))
+        set_seeds(self.cfg["seed"])
+        if self.cfg["id"] is None:
+            init_id(self.cfg)
 
-    logger.info("Loading radiomics dataset...")
-    data_dir = os.path.join(cfg["data"], "radiomics")
-    X_train, y_train, X_valid, y_valid, X_test, y_test = get_radiomics_dataset(
-        data_dir=data_dir
-    )
-    logger.info("Radiomics dataset loaded!")
+        self.logger = init_logger(path_to_log=build_log_file_path(self.cfg))
+        self.logger.info(pprint.pformat(self.cfg, indent=4))
 
-    logger.info("X_train shape: %s", X_train.shape)
-    logger.info("y_train shape: %s", y_train.shape)
-    logger.info("X_valid shape: %s", X_valid.shape)
-    logger.info("y_valid shape: %s", y_valid.shape)
-    logger.info("X_test shape: %s", X_test.shape)
-    logger.info("y_test shape: %s", y_test.shape)
-
-    if cfg["grid_search"]:
-        X_train_valid, y_train_valid = combine_train_and_valid(
-            X_train=X_train, y_train=y_train, X_valid=X_valid, y_valid=y_valid
+        self.model_path = os.path.join(
+            build_checkpoints_path(self.cfg), "xgbc.pickle"
         )
 
-        logger.info("X_train_valid shape: %s", X_train.shape)
-        logger.info("y_train_valid shape: %s", y_train.shape)
+    def load_dataset(self) -> None:
+        self.logger.info("Loading radiomics dataset...")
+        data_dir = os.path.join(self.cfg["data"], "radiomics")
+        (
+            self.X_train,
+            self.y_train,
+            self.X_valid,
+            self.y_valid,
+            self.X_test,
+            self.y_test,
+        ) = get_radiomics_dataset(data_dir=data_dir)
+        self.logger.info("Radiomics dataset loaded!")
 
-        logger.info("Starting grid search for XGBoost Classifier...")
-        grid_search = search_grid(cfg, X_train_valid, y_train_valid)
-        logger.info("Grid search complete!")
+        self.logger.info("X_train shape: %s", self.X_train.shape)
+        self.logger.info("y_train shape: %s", self.y_train.shape)
+        self.logger.info("X_valid shape: %s", self.X_valid.shape)
+        self.logger.info("y_valid shape: %s", self.y_valid.shape)
+        self.logger.info("X_test shape: %s", self.X_test.shape)
+        self.logger.info("y_test shape: %s", self.y_test.shape)
 
-        xgbc = grid_search.best_estimator_
+    def search_grid(self) -> GridSearchCV:
+        """Perform grid search over XGBoost hyperparamters, return result."""
+        parameter_grid = {
+            "n_estimators": [700, 800],
+            "max_depth": [3, 4],
+            "learning_rate": [0.01],
+            # "n_estimators": [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+            # "max_depth": [3, 4, 5, 6],
+            # "learning_rate": [0.01, 0.05, 0.1],
+            # "gamma": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+            # "subsample": [0.7, 0.8, 0.9, 1.0],
+            # "reg_alpha": [1e-5, 1e-4, 1e-3],
+            # "reg_lambda": [0.1, 0.01, 1],
+        }
 
-        logger.info(
-            "Best hyperparameter settings: %s",
-            pprint.pformat(grid_search.best_params_, indent=4),
+        X_train_valid = np.concatenate(
+            (self.X_train.to_numpy(), self.X_valid.to_numpy())
         )
-    else:
-        xgbc = XGBClassifier(
-            n_estimators=cfg["n_estimators"],
-            max_depth=cfg["max_depth"],
-            learning_rate=cfg["lr"],
-            gamma=cfg["gamma"],
-            subsample=cfg["subsample"],
-            reg_alpha=cfg["reg_alpha"],
-            reg_lambda=cfg["reg_lambda"],
+        y_train_valid = np.concatenate((self.y_train, self.y_valid))
+        self.logger.info("X_train_valid shape: %s", self.X_train.shape)
+        self.logger.info("y_train_valid shape: %s", self.y_train.shape)
+
+        xgbc = XGBClassifier(n_jobs=16, random_state=self.cfg["seed"])
+
+        grid_search = GridSearchCV(
+            xgbc,
+            parameter_grid,
+            scoring="balanced_accuracy",
+            n_jobs=16,
+            refit=True,
+            cv=5,
+            verbose=4,
+            return_train_score=True,
         )
-        xgbc.fit(X_train, y_train)
 
-    important_features = select_important_features(
-        X_train.columns.to_list(), xgbc.feature_importances_.tolist()
-    )
+        grid_search.fit(X_train_valid, y_train_valid)
+        return grid_search
 
-    logger.info(
-        "Important features (%d/%d): %s",
-        len(important_features),
-        len(X_train.columns),
-        pprint.pformat(important_features, indent=4),
-    )
+    def train_xgb_classifier(self) -> XGBClassifier:
+        """Train XGBoost classifier based on given configuration."""
+        if self.cfg["grid_search"]:
 
-    logger.info(
-        "Training set accuracy: %f",
-        accuracy_score(y_true=y_train, y_pred=xgbc.predict(X_train)),
-    )
-    logger.info(
-        "Validation set accuracy: %f",
-        accuracy_score(y_true=y_valid, y_pred=xgbc.predict(X_valid)),
-    )
-    logger.info(
-        "Test set accuracy: %f",
-        accuracy_score(y_true=y_test, y_pred=xgbc.predict(X_test)),
-    )
+            self.logger.info("Starting grid search for XGBoost Classifier...")
+            grid_search = self.search_grid()
+            self.logger.info("Grid search complete!")
+
+            xgbc = grid_search.best_estimator_
+            save_xgb_classifier(xgbc=xgbc, model_path=self.model_path)
+
+            self.logger.info(
+                "Best hyperparameter settings: %s",
+                pprint.pformat(grid_search.best_params_, indent=4),
+            )
+        else:
+            xgbc = XGBClassifier(
+                n_estimators=self.cfg["n_estimators"],
+                max_depth=self.cfg["max_depth"],
+                learning_rate=self.cfg["lr"],
+                gamma=self.cfg["gamma"],
+                subsample=self.cfg["subsample"],
+                reg_alpha=self.cfg["reg_alpha"],
+                reg_lambda=self.cfg["reg_lambda"],
+            )
+            xgbc.fit(self.X_train, self.y_train)
+            save_xgb_classifier(xgbc=xgbc, model_path=self.model_path)
+        return xgbc
+
+    def evaluate_xgb_classifier(self, xgbc: XGBClassifier) -> None:
+        important_features = select_important_features(
+            self.X_train.columns.to_list(), xgbc.feature_importances_.tolist()
+        )
+
+        self.logger.info(
+            "Important features (%d/%d): %s",
+            len(important_features),
+            len(self.X_train.columns),
+            pprint.pformat(important_features, indent=4),
+        )
+
+        metrics = {
+            "accuracy": accuracy_score,
+            "balanced accuracy": balanced_accuracy_score,
+        }
+
+        for description, metric in metrics.items():
+            self.logger.info(
+                "Training set %s: %f",
+                description,
+                metric(self.y_train, xgbc.predict(self.X_train)),
+            )
+            self.logger.info(
+                "Validation set %s: %f",
+                description,
+                metric(self.y_valid, xgbc.predict(self.X_valid)),
+            )
+            self.logger.info(
+                "Test set %s: %f",
+                description,
+                metric(self.y_test, xgbc.predict(self.X_test)),
+            )
+
+    def run(self) -> None:
+        """Run task 1."""
+        if self.cfg["retrain"]:
+            xgbc = self.train_xgb_classifier()
+        else:
+            xgbc = load_xgb_classifier(self.model_path)
+
+        self.evaluate_xgb_classifier(xgbc)
 
 
 if "__main__" == __name__:
-    main()
+    task1 = Task1()
+    task1.run()
