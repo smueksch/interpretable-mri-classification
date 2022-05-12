@@ -1,19 +1,32 @@
 # Environment
 
-```bash
-python -m venv ml4hc-p3
-source ml4hc-p3/bin/activate
-python -m pip install -r requirements.txt
-```
+In the root of this repository, run
 
-> N.B.: If you using Windows, please refer to the
-> [official documentation](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/)
-> on how to create and activate virtual environments.
+```sh
+conda env create -f environment.yml
+```
 
 # Task 1
 
+First, activate the environment:
+
+```sh
+conda activate ml4hc_project3
+```
+
+then navigate to the `src` folder to run the remaining commands.
+
+To train the XGBoost classifier with the best hyperparameter settings, run:
+
+```sh
+python task1.py --retrain
+```
+
+To perform the grid search used to find the best hyperparameter settings for the
+XGBoost classifier, run:
+
 ```bash
-python task1.py
+python task1.py --retrain --grid_search
 ```
 
 # Task 2

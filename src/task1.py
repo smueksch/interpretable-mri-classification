@@ -124,6 +124,8 @@ class Task1:
             build_checkpoints_path(self.cfg), "xgbc.pickle"
         )
 
+        self.load_dataset()
+
     def load_dataset(self) -> None:
         self.logger.info("Loading radiomics dataset...")
         data_dir = os.path.join(self.cfg["data"], "radiomics")
