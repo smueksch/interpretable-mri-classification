@@ -149,16 +149,24 @@ class Task1:
     def search_grid(self) -> GridSearchCV:
         """Perform grid search over XGBoost hyperparamters, return result."""
         parameter_grid = {
-            "n_estimators": [700, 800],
-            "max_depth": [3, 4],
-            "learning_rate": [0.01],
-            # "n_estimators": [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
-            # "max_depth": [3, 4, 5, 6],
-            # "learning_rate": [0.01, 0.05, 0.1],
-            # "gamma": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-            # "subsample": [0.7, 0.8, 0.9, 1.0],
-            # "reg_alpha": [1e-5, 1e-4, 1e-3],
-            # "reg_lambda": [0.1, 0.01, 1],
+            "n_estimators": [
+                100,
+                200,
+                300,
+                400,
+                500,
+                600,
+                700,
+                800,
+                900,
+                1000,
+            ],
+            "max_depth": [3, 4, 5, 6],
+            "learning_rate": [0.01, 0.05, 0.1],
+            "gamma": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+            "subsample": [0.7, 0.8, 0.9, 1.0],
+            "reg_alpha": [1e-5, 1e-4, 1e-3],
+            "reg_lambda": [0.1, 0.01, 1],
         }
 
         X_train_valid = np.concatenate(
