@@ -47,18 +47,6 @@ def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
         help="Subsample ratio of training instance.",
     )
     parser.add_argument(
-        "--reg_alpha",
-        type=float,
-        default=1e-3,
-        help="L1 regularization term on weights.",
-    )
-    parser.add_argument(
-        "--reg_lambda",
-        type=float,
-        default=1e-3,
-        help="L2 regularization term on weights.",
-    )
-    parser.add_argument(
         "--grid_search",
         action="store_true",
         help="If set, hyperparameter grid search for XGBoost classifier will"
@@ -161,12 +149,10 @@ class Task1:
                 900,
                 1000,
             ],
-            "max_depth": [3, 4, 5, 6],
-            "learning_rate": [0.01, 0.05, 0.1],
-            "gamma": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+            "max_depth": [3, 4, 5],
+            "learning_rate": [0.01, 0.1],
+            "gamma": [0.0, 0.25, 0.5, 0.75, 1.0],
             "subsample": [0.7, 0.8, 0.9, 1.0],
-            "reg_alpha": [1e-5, 1e-4, 1e-3],
-            "reg_lambda": [0.1, 0.01, 1],
         }
 
         X_train_valid = np.concatenate(
@@ -214,8 +200,6 @@ class Task1:
                 learning_rate=self.cfg["lr"],
                 gamma=self.cfg["gamma"],
                 subsample=self.cfg["subsample"],
-                reg_alpha=self.cfg["reg_alpha"],
-                reg_lambda=self.cfg["reg_lambda"],
             )
             xgbc.fit(self.X_train, self.y_train)
             save_xgb_classifier(xgbc=xgbc, model_path=self.model_path)
