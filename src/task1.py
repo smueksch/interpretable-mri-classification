@@ -3,7 +3,7 @@ import pprint
 from argparse import ArgumentParser
 import pickle
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 
 import numpy as np
 from sklearn.model_selection import GridSearchCV
@@ -19,7 +19,7 @@ def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--n_estimators",
         type=int,
-        default=800,
+        default=300,
         help="Number of gradient boosted trees.",
     )
     parser.add_argument(
@@ -37,13 +37,13 @@ def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--gamma",
         type=float,
-        default=1.0,
+        default=0.0,
         help="Min. loss to make further partition on leaf node.",
     )
     parser.add_argument(
         "--subsample",
         type=float,
-        default=1.0,
+        default=0.9,
         help="Subsample ratio of training instance.",
     )
     parser.add_argument(
@@ -134,6 +134,13 @@ class Task1:
         self.logger.info("X_test shape: %s", self.X_test.shape)
         self.logger.info("y_test shape: %s", self.y_test.shape)
 
+    def combine_train_valid(self) -> Tuple[np.ndarray, np.ndarray]:
+        X_train_valid = np.concatenate(
+            (self.X_train.to_numpy(), self.X_valid.to_numpy())
+        )
+        y_train_valid = np.concatenate((self.y_train, self.y_valid))
+        return X_train_valid, y_train_valid
+
     def search_grid(self) -> GridSearchCV:
         """Perform grid search over XGBoost hyperparamters, return result."""
         parameter_grid = {
@@ -155,20 +162,17 @@ class Task1:
             "subsample": [0.7, 0.8, 0.9, 1.0],
         }
 
-        X_train_valid = np.concatenate(
-            (self.X_train.to_numpy(), self.X_valid.to_numpy())
-        )
-        y_train_valid = np.concatenate((self.y_train, self.y_valid))
+        X_train_valid, y_train_valid = self.combine_train_valid()
         self.logger.info("X_train_valid shape: %s", self.X_train.shape)
         self.logger.info("y_train_valid shape: %s", self.y_train.shape)
 
-        xgbc = XGBClassifier(n_jobs=16, random_state=self.cfg["seed"])
+        xgbc = XGBClassifier(random_state=self.cfg["seed"])
 
         grid_search = GridSearchCV(
             xgbc,
             parameter_grid,
             scoring="balanced_accuracy",
-            n_jobs=16,
+            n_jobs=-1,
             refit=True,
             cv=5,
             verbose=4,
@@ -201,7 +205,8 @@ class Task1:
                 gamma=self.cfg["gamma"],
                 subsample=self.cfg["subsample"],
             )
-            xgbc.fit(self.X_train, self.y_train)
+            X_train_valid, y_train_valid = self.combine_train_valid()
+            xgbc.fit(X_train_valid, y_train_valid)
             save_xgb_classifier(xgbc=xgbc, model_path=self.model_path)
         return xgbc
 
