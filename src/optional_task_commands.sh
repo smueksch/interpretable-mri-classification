@@ -1,0 +1,35 @@
+bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name baseline_cnn
+bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name baseline_cnn --normalize
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name baseline_cnn --normalize --horizontal_flip
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name baseline_cnn --normalize --vertical_flip
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name baseline_cnn --normalize --autocontrast
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name baseline_cnn --normalize --rotate
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name baseline_cnn --normalize --adjust_sharpness
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name baseline_cnn --normalize --gaussian_blur
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name baseline_cnn --normalize --color_jitter
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name baseline_cnn --normalize --random_crop
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name baseline_cnn --normalize --horizontal_flip --vertical_flip --autocontrast --rotate --adjust_sharpness --gaussian_blur --color_jitter --random_crop
+
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name resnet_cnn
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name resnet_cnn --normalize
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name resnet_cnn --normalize --horizontal_flip
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name resnet_cnn --normalize --vertical_flip
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name resnet_cnn --normalize --autocontrast
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name resnet_cnn --normalize --rotate
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name resnet_cnn --normalize --adjust_sharpness
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name resnet_cnn --normalize --gaussian_blur
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name resnet_cnn --normalize --color_jitter
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name resnet_cnn --normalize --random_crop
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name resnet_cnn --normalize --horizontal_flip --vertical_flip --equalize --autocontrast --rotate --adjust_sharpness --gaussian_blur --color_jitter --random_crop
+
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name inception_cnn
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name inception_cnn --normalize
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name inception_cnn --normalize --horizontal_flip
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name inception_cnn --normalize --vertical_flip
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name inception_cnn --normalize --autocontrast
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name inception_cnn --normalize --rotate
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name inception_cnn --normalize --adjust_sharpness
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name inception_cnn --normalize --gaussian_blur
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name inception_cnn --normalize --color_jitter
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name inception_cnn --normalize --random_crop
+# bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name inception_cnn --normalize --horizontal_flip --vertical_flip --equalize --autocontrast --rotate --adjust_sharpness --gaussian_blur --color_jitter --random_crop
