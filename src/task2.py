@@ -31,7 +31,7 @@ def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=8,
+        default=64,
         help="Batch size used in train, val and test data loaders.",
     )
     parser.add_argument(
@@ -48,7 +48,7 @@ def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
         "--max_epochs", type=int, default=100, help="Maximum number of epochs."
     )
     parser.add_argument(
-        "--lr", type=float, default=0.0001, help="Learning rate for optimizer."
+        "--lr", type=float, default=0.001, help="Learning rate for optimizer."
     )
     parser.add_argument(
         "--weight_decay", type=float, default=0.0, help="Weight decay for optimizer."
@@ -310,15 +310,14 @@ def save_predictions_to_disk(
     all_yhat: torch.Tensor,
     result_dict: Dict[str, float],
     split: str,
-):
+) -> None:
     checkpoints_dir = get_checkpoints_dir(cfg)
     predictions_path = os.path.join(checkpoints_dir, f"{split}_predictions.txt")
 
     all_yhat_probs = calculate_probs(cfg=cfg, yhat=all_yhat)
     columns = ["prob_0", "prob_1", "label"]
     df = pd.DataFrame(
-        torch.hstack([all_yhat_probs, all_y.view(-1, 1)]).detach().cpu().numpy(),
-        columns=columns,
+        to_numpy(torch.hstack([all_yhat_probs, all_y.view(-1, 1)])), columns=columns,
     )
     df.to_csv(predictions_path, index=False)
 
