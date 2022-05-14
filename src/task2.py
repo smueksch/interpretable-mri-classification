@@ -56,7 +56,7 @@ def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--lr_scheduler_patience",
         type=int,
-        default=4,
+        default=5,
         help="Maximum number of epochs without an improvement on validation loss before the learning rate is reduced.",
     )
     parser.add_argument(
@@ -230,13 +230,9 @@ def evaluation_epoch(
             X, y = batch
             X = X.float().to(cfg["device"])
             y = y.to(cfg["device"])
+            yhat = model(X)
             all_y.append(y)
-            if cfg["model_name"] == "inception_cnn":
-                yhat = model(X)
-                all_yhat.append(yhat)
-            else:
-                yhat = model(X)
-                all_yhat.append(yhat)
+            all_yhat.append(yhat)
 
         all_y = torch.hstack(all_y)
         all_yhat = torch.vstack(all_yhat)
@@ -526,7 +522,7 @@ def save_feature_attributions(
     model: nn.Module,
 ) -> None:
     train_images = torch.vstack(
-        [batch[0] for index, batch in enumerate(train_data_loader) if index < 10]
+        [batch[0] for batch in enumerate(train_data_loader)]
     )
     test_images = next(iter(test_data_loader))[0][:10]
 
