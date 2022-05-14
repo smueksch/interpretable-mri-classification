@@ -127,9 +127,11 @@ def calculate_loss(
 ) -> torch.Tensor:
     model_name = cfg["model_name"]
     if model_name == "baseline_cnn":  # returns probabilities
-        yhat_logged = torch.log(yhat + 1e-20)  # to avoid log(0)
-        criterion = nn.NLLLoss(weight=class_weights)
-        loss = criterion(input=yhat_logged, target=y)
+        # yhat_logged = torch.log(yhat + 1e-20)  # to avoid log(0)
+        # criterion = nn.NLLLoss(weight=class_weights)
+        # loss = criterion(input=yhat_logged, target=y)
+        criterion = nn.CrossEntropyLoss(weight=class_weights)
+        loss = criterion(input=yhat, target=y)
     elif model_name == "resnet_cnn":
         criterion = nn.CrossEntropyLoss(weight=class_weights)
         loss = criterion(input=yhat, target=y)
@@ -148,7 +150,7 @@ def calculate_loss(
 def calculate_probs(cfg: Dict[str, Any], yhat: torch.Tensor) -> torch.Tensor:
     model_name = cfg["model_name"]
     if model_name == "baseline_cnn":  # returns probabilities
-        probs = yhat
+        probs = nn.Softmax(dim=-1)(yhat)
     elif model_name in ["resnet_cnn", "inception_cnn"]:
         probs = nn.Softmax(dim=-1)(yhat)
     else:
@@ -352,7 +354,7 @@ class BaselineCNN(nn.Module):
             nn.BatchNorm1d(64),
             nn.ReLU(),
             nn.Linear(64, 2),
-            nn.Softmax(dim=-1),
+            # nn.Softmax(dim=-1),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -521,9 +523,7 @@ def save_feature_attributions(
     test_data_loader: torch.utils.data.DataLoader,
     model: nn.Module,
 ) -> None:
-    train_images = torch.vstack(
-        [batch[0] for batch in enumerate(train_data_loader)]
-    )
+    train_images = torch.vstack([batch[0] for batch in train_data_loader])
     test_images = next(iter(test_data_loader))[0][:10]
 
     e = shap.DeepExplainer(model, train_images)
