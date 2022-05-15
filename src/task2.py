@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 import logging
 import time
 
-from typing import Dict, Any, Union, Tuple
+from typing import Dict, Any, Union, Tuple, List
 
 import torch
 import shap
@@ -42,28 +42,19 @@ def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
     )
     parser.add_argument("--num_classes", type=int, default=2, help="Number of classes.")
     parser.add_argument(
-        "--gradient_max_norm", type=float, default=1.0, help="Maximum gradient norm.",
-    )
-    parser.add_argument(
-        "--max_epochs", type=int, default=100, help="Maximum number of epochs."
+        "--max_epochs", type=int, default=200, help="Maximum number of epochs."
     )
     parser.add_argument(
         "--lr", type=float, default=0.001, help="Learning rate for optimizer."
     )
     parser.add_argument(
-        "--weight_decay", type=float, default=0.0, help="Weight decay for optimizer."
+        "--weight_decay", type=float, default=1e-7, help="Weight decay for optimizer.",
     )
     parser.add_argument(
         "--lr_scheduler_patience",
         type=int,
-        default=5,
-        help="Maximum number of epochs without an improvement on validation loss before the learning rate is reduced.",
-    )
-    parser.add_argument(
-        "--early_stop_patience",
-        type=int,
         default=20,
-        help="Maximum number of epochs without an improvement on validation loss before the training is terminated.",
+        help="Maximum number of epochs without an improvement on validation loss before the learning rate is reduced.",
     )
     parser.add_argument(
         "--use_lr_scheduler",
@@ -75,7 +66,7 @@ def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
         "--model_name",
         type=str,
         default="baseline_cnn",
-        choices=["baseline_cnn", "resnet_cnn", "inception_cnn"],
+        choices=["baseline_cnn", "resnet_cnn", "resnext_cnn"],
         help="Model name.",
     )
     parser.add_argument(
@@ -89,22 +80,12 @@ def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
         help="Randomly flips input images vertically.",
     )
     parser.add_argument(
-        "--autocontrast",
-        action="store_true",
-        help="Randomly autocontrasts input images.",
-    )
-    parser.add_argument(
         "--rotate", action="store_true", help="Randomly rotates input images.",
     )
     parser.add_argument(
-        "--adjust_sharpness",
+        "--perspective",
         action="store_true",
-        help="Randomly adjusts sharpness of input images.",
-    )
-    parser.add_argument(
-        "--gaussian_blur",
-        action="store_true",
-        help="Randomly adds Gaussian blur to input images.",
+        help="Applies random perspective to input images.",
     )
     parser.add_argument(
         "--color_jitter", action="store_true", help="Randomly applies color jittering.",
@@ -113,53 +94,33 @@ def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
         "--random_crop", action="store_true", help="Randomly crops input images.",
     )
     parser.add_argument(
-        "--normalize", action="store_true", help="Whether to normalize input images."
+        "--normalize", action="store_true", help="Whether to normalize input images.",
     )
     return parser
 
 
-def calculate_loss(
-    cfg: Dict[str, Any],
-    y: torch.Tensor,
-    yhat: torch.Tensor,
-    yhat_aux: Union[torch.Tensor, None],
-    class_weights: torch.Tensor,
-) -> torch.Tensor:
-    model_name = cfg["model_name"]
-    if model_name == "baseline_cnn":  # returns probabilities
-        # yhat_logged = torch.log(yhat + 1e-20)  # to avoid log(0)
-        # criterion = nn.NLLLoss(weight=class_weights)
-        # loss = criterion(input=yhat_logged, target=y)
-        criterion = nn.CrossEntropyLoss(weight=class_weights)
-        loss = criterion(input=yhat, target=y)
-    elif model_name == "resnet_cnn":
-        criterion = nn.CrossEntropyLoss(weight=class_weights)
-        loss = criterion(input=yhat, target=y)
-    elif model_name == "inception_cnn":
-        criterion = nn.CrossEntropyLoss(weight=class_weights)
-        loss = criterion(input=yhat, target=y)
-        if yhat_aux is not None:
-            loss = loss + 0.4 * criterion(
-                input=yhat_aux, target=y
-            )  # as suggested in https://pytorch.org/tutorials/beginner/finetuning_torchvision_models_tutorial.html
-    else:
-        raise Exception(f"Not a valid model_name {model_name}.")
-    return loss
-
-
-def calculate_probs(cfg: Dict[str, Any], yhat: torch.Tensor) -> torch.Tensor:
-    model_name = cfg["model_name"]
-    if model_name == "baseline_cnn":  # returns probabilities
-        probs = nn.Softmax(dim=-1)(yhat)
-    elif model_name in ["resnet_cnn", "inception_cnn"]:
-        probs = nn.Softmax(dim=-1)(yhat)
-    else:
-        raise Exception(f"Not a valid model_name {model_name}.")
-    return probs
-
-
 def to_numpy(tensor: torch.Tensor) -> np.ndarray:
     return tensor.detach().cpu().numpy()
+
+
+def get_normalization_mean_and_std() -> Tuple[List[float], List[float]]:
+    return [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
+
+
+def unnormalize_images(images: torch.Tensor) -> torch.Tensor:
+    """
+        Input: Shape: (N, H, W, C). Normalized images. Before normalization, pixel values were between [0, 1].
+        Output: Shape: (N, H, W, C). Images with pixel values between [0, 1].
+    """
+
+    mean, std = get_normalization_mean_and_std()
+    mean = torch.Tensor(mean).unsqueeze(-1)
+    std = torch.Tensor(std).unsqueeze(-1)
+    images = images.permute(3, 0, 1, 2)  # (C, N, H, W)
+    images = (images.reshape(3, -1) * std + mean).reshape(images.shape)  # (C, N, H, W)
+    images = images.permute(1, 2, 3, 0)  # (N, H, W, C)
+    images = images.clamp(0, 1)
+    return images
 
 
 def train_epoch(
@@ -172,43 +133,24 @@ def train_epoch(
     model.train()
     all_y = []
     all_yhat = []
-    all_yhat_aux = []
     for batch in train_data_loader:
         optimizer.zero_grad()
         X, y = batch
         X = X.float().to(cfg["device"])
         y = y.to(cfg["device"])
         all_y.append(y)
-        if cfg["model_name"] == "inception_cnn":
-            yhat, yhat_aux = model(X)
-            all_yhat.append(yhat)
-            all_yhat_aux.append(yhat_aux)
-        else:
-            yhat = model(X)
-            yhat_aux = None
-            all_yhat.append(yhat)
-        loss = calculate_loss(
-            cfg=cfg,
-            y=y.long(),
-            yhat=yhat,
-            yhat_aux=yhat_aux,
-            class_weights=class_weights,
-        )
+        yhat = model(X)
+        all_yhat.append(yhat)
+        loss = nn.CrossEntropyLoss(weight=class_weights)(input=yhat, target=y)
         loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), cfg["gradient_max_norm"])
         optimizer.step()
     all_y = torch.hstack(all_y)
     all_yhat = torch.vstack(all_yhat)
-    if cfg["model_name"] == "inception_cnn":
-        all_yhat_aux = torch.vstack(all_yhat_aux)
-    else:
-        all_yhat_aux = None
 
     train_loss_dict = evaluate_predictions(
         cfg=cfg,
         all_y=all_y,
         all_yhat=all_yhat,
-        all_yhat_aux=all_yhat_aux,
         class_weights=class_weights,
         split="train",
         save_to_disk=False,
@@ -243,7 +185,6 @@ def evaluation_epoch(
             cfg=cfg,
             all_y=all_y,
             all_yhat=all_yhat,
-            all_yhat_aux=None,
             class_weights=class_weights,
             split=split,
             save_to_disk=save_to_disk,
@@ -255,22 +196,15 @@ def evaluate_predictions(
     cfg: Dict[str, Any],
     all_y: torch.Tensor,
     all_yhat: torch.Tensor,
-    all_yhat_aux: Union[torch.Tensor, None],
     class_weights: torch.Tensor,
     split: str,
     save_to_disk: bool,
 ) -> Dict[str, float]:
     result_dict = {}
-    all_yhat_probs = calculate_probs(cfg=cfg, yhat=all_yhat)
+    all_yhat_probs = nn.Softmax(dim=-1)(all_yhat)
     all_yhat_argmaxed = torch.argmax(all_yhat_probs, dim=1)
     result_dict["loss"] = float(
-        calculate_loss(
-            cfg=cfg,
-            y=all_y,
-            yhat=all_yhat,
-            yhat_aux=all_yhat_aux,
-            class_weights=class_weights,
-        )
+        nn.CrossEntropyLoss(weight=class_weights)(input=all_yhat, target=all_y)
     )
     result_dict["unbalanced_acc_score"] = accuracy_score(all_y, all_yhat_argmaxed)
     result_dict["balanced_acc_score"] = balanced_accuracy_score(
@@ -312,7 +246,7 @@ def save_predictions_to_disk(
     checkpoints_dir = get_checkpoints_dir(cfg)
     predictions_path = os.path.join(checkpoints_dir, f"{split}_predictions.txt")
 
-    all_yhat_probs = calculate_probs(cfg=cfg, yhat=all_yhat)
+    all_yhat_probs = nn.Softmax(dim=-1)(all_yhat)
     columns = ["prob_0", "prob_1", "label"]
     df = pd.DataFrame(
         to_numpy(torch.hstack([all_yhat_probs, all_y.view(-1, 1)])), columns=columns,
@@ -374,6 +308,8 @@ class ResNetCNN(nn.Module):
         self.model = models.resnet18(pretrained=True)
         for param in self.model.parameters():
             param.requires_grad = False
+        for param in self.model.layer4.parameters():
+            param.requires_grad = True
         self.model.fc = nn.Sequential(
             nn.Linear(self.model.fc.in_features, self.cfg["num_classes"])
         )
@@ -388,26 +324,25 @@ class ResNetCNN(nn.Module):
         return self.model(x)
 
 
-class InceptionCNN(nn.Module):
+class ResNeXtCNN(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.model = models.inception_v3(pretrained=True)
+        self.model = models.resnext50_32x4d(pretrained=True)
         for param in self.model.parameters():
             param.requires_grad = False
-        # Auxilary network
-        self.model.AuxLogits.fc = nn.Linear(
-            self.model.AuxLogits.fc.in_features, self.cfg["num_classes"]
+        for param in self.model.layer4.parameters():
+            param.requires_grad = True
+        self.model.fc = nn.Sequential(
+            nn.Linear(self.model.fc.in_features, self.cfg["num_classes"])
         )
-        # Primary network
-        self.model.fc = nn.Linear(self.model.fc.in_features, self.cfg["num_classes"])
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
             Inputs:
                 x: Input images. A torch.Tensor with shape (cfg["batch_size"], 3, IMAGE_HEIGHT, IMAGE_WIDTH)
             Output:
-                yhat: Logits. A tuple of (torch.Tensor, torch.Tensor) each with shape (cfg["batch_size"], 2)
+                yhat: Logits. A torch.Tensor with shape (cfg["batch_size"], 2)
         """
         return self.model(x)
 
@@ -417,8 +352,8 @@ def get_model(cfg: Dict[str, Any]) -> nn.Module:
         return BaselineCNN(cfg).to(cfg["device"])
     elif cfg["model_name"] == "resnet_cnn":
         return ResNetCNN(cfg).to(cfg["device"])
-    elif cfg["model_name"] == "inception_cnn":
-        return InceptionCNN(cfg).to(cfg["device"])
+    elif cfg["model_name"] == "resnext_cnn":
+        return ResNeXtCNN(cfg).to(cfg["device"])
     else:
         raise Exception(f"Not a valid model {model}.")
 
@@ -459,18 +394,9 @@ def get_train_transforms(cfg: Dict[str, Any]) -> transforms.transforms.Compose:
     name_transform_mapping = {
         "horizontal_flip": transforms.RandomHorizontalFlip(p=0.5),
         "vertical_flip": transforms.RandomVerticalFlip(p=0.5),
-        "autocontrast": transforms.RandomAutocontrast(p=0.25),
-        "rotate": transforms.RandomRotation(degrees=15),
-        "adjust_sharpness": transforms.RandomAdjustSharpness(
-            sharpness_factor=np.random.rand() * 2, p=0.5
-        ),
-        "gaussian_blur": transforms.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 5)),
-        "color_jitter": transforms.ColorJitter(
-            brightness=0.4, contrast=0.4, saturation=0.4, hue=0.4
-        ),
-        "normalize": transforms.Normalize(
-            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-        ),
+        "perspective": transforms.RandomPerspective(distortion_scale=0.25, p=0.5),
+        "color_jitter": transforms.ColorJitter(),
+        "rotate": transforms.RandomRotation(degrees=30),
     }
     train_transforms = [transforms.ToTensor()]
     for name, transform in name_transform_mapping.items():
@@ -491,14 +417,13 @@ def get_train_transforms(cfg: Dict[str, Any]) -> transforms.transforms.Compose:
     else:
         train_transforms.extend(
             [
-                transforms.Resize(
-                    cfg["image_size"]
-                ),  # resize shortest side to 32 pixels
-                transforms.CenterCrop(
-                    cfg["image_size"]
-                ),  # crop longest side to 32 pixels at center
+                transforms.Resize(cfg["image_size"]),
+                transforms.CenterCrop(cfg["image_size"]),
             ]
         )
+    if cfg["normalize"]:
+        mean, std = get_normalization_mean_and_std()
+        train_transforms.append(transforms.Normalize(mean=mean, std=std))
     return transforms.Compose(train_transforms)
 
 
@@ -506,38 +431,48 @@ def get_test_transforms(cfg: Dict[str, Any]) -> transforms.transforms.Compose:
     test_transforms = [transforms.ToTensor()]
     test_transforms.extend(
         [
-            transforms.Resize(128),  # resize shortest side to 128 pixels
-            transforms.CenterCrop(128),  # crop longest side to 128 pixels at center
+            transforms.Resize(cfg["image_size"]),
+            transforms.CenterCrop(cfg["image_size"]),
         ]
     )
     if cfg["normalize"]:
-        test_transforms.append(
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        )
+        mean, std = get_normalization_mean_and_std()
+        test_transforms.append(transforms.Normalize(mean=mean, std=std))
     return transforms.Compose(test_transforms)
 
 
-def save_feature_attributions(
+def save_shap_feature_attributions(
     cfg: Dict[str, Any],
     train_data_loader: torch.utils.data.DataLoader,
     test_data_loader: torch.utils.data.DataLoader,
     model: nn.Module,
 ) -> None:
+
     train_images = torch.vstack([batch[0] for batch in train_data_loader])
-    test_images = next(iter(test_data_loader))[0][:10]
+    test_images_and_labels = next(iter(test_data_loader))
+    test_images = test_images_and_labels[0][:10]
+    test_labels = test_images_and_labels[1][:10]
 
     e = shap.DeepExplainer(model, train_images)
     shap_values = e.shap_values(test_images)
+
+    test_images = unnormalize_images(test_images)  # for visualization
+
     shap_numpy = [np.swapaxes(np.swapaxes(s, 1, -1), 1, 2) for s in shap_values]
     test_numpy = np.swapaxes(np.swapaxes(test_images.numpy(), 1, -1), 1, 2)
     plt.figure(figsize=(20, 20))
     shap.image_plot(shap_numpy, test_numpy)
 
     checkpoints_dir = get_checkpoints_dir(cfg)
-    feature_attributions_path = os.path.join(
-        checkpoints_dir, "feature_attributions.png"
+    shap_feature_attributions_path = os.path.join(
+        checkpoints_dir, "shap_feature_attributions.png"
     )
-    plt.savefig(feature_attributions_path)
+    plt.savefig(shap_feature_attributions_path)
+
+    shap_labels_path = os.path.join(checkpoints_dir, "shap_labels.txt")
+    with open(shap_labels_path, "w") as file_writer:
+        for label in test_labels:
+            file_writer.write(f"{int(label)}\n")
 
 
 def main() -> None:
@@ -551,10 +486,8 @@ def main() -> None:
     model_name = cfg["model_name"]
     if model_name == "baseline_cnn":
         cfg["image_size"] = 128
-    elif model_name == "resnet_cnn":
+    elif model_name in ["resnet_cnn", "resnext_cnn"]:
         cfg["image_size"] = 224
-    elif model_name == "inception_cnn":
-        cfg["image_size"] = 299
     else:
         raise Exception(f"Not a valid model_name {model_name}.")
 
@@ -596,7 +529,6 @@ def main() -> None:
         scheduler = get_scheduler(cfg=cfg, optimizer=optimizer)
 
     best_val_loss = np.inf
-    early_stop_counter = 0
     for epoch in range(cfg["max_epochs"]):
         train_loss_dict = train_epoch(
             cfg=cfg,
@@ -641,20 +573,18 @@ def main() -> None:
         if current_val_loss < best_val_loss:
             save_checkpoint(cfg=cfg, model=model, logger=logger)
             best_val_loss = current_val_loss
-            early_stop_counter = 0
-        else:
-            early_stop_counter += 1
-
-        if early_stop_counter == cfg["early_stop_patience"]:
-            break
 
     model = load_checkpoint(cfg=cfg, logger=logger)
-    save_feature_attributions(
-        cfg=cfg,
-        train_data_loader=train_data_loader,
-        test_data_loader=test_data_loader,
-        model=model,
-    )
+
+    if (
+        cfg["model_name"] != "resnext_cnn"
+    ):  # Shap gives an error for resnext architecture.
+        save_shap_feature_attributions(
+            cfg=cfg,
+            train_data_loader=train_data_loader,
+            test_data_loader=test_data_loader,
+            model=model,
+        )
 
     (
         train_data_loader,
