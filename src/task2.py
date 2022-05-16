@@ -66,7 +66,7 @@ def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
         "--model_name",
         type=str,
         default="baseline_cnn",
-        choices=["baseline_cnn", "resnet_cnn", "resnext_cnn"],
+        choices=["baseline_cnn", "resnet18_cnn", "resnext50_cnn"],
         help="Model name.",
     )
     parser.add_argument(
@@ -305,30 +305,13 @@ class ResNetCNN(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.model = models.resnet18(pretrained=True)
-        for param in self.model.parameters():
-            param.requires_grad = False
-        for param in self.model.layer4.parameters():
-            param.requires_grad = True
-        self.model.fc = nn.Sequential(
-            nn.Linear(self.model.fc.in_features, self.cfg["num_classes"])
-        )
+        if cfg["model_name"] == "resnet18_cnn":
+            self.model = models.resnet18(pretrained=True)
+        elif cfg["model_name"] == "resnext50_cnn":
+            self.model = models.resnext50_32x4d(pretrained=True)
+        else:
+            raise Exception(f"Not a valid ResNetCNN model_name {model_name}.")
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-            Inputs:
-                x: Input images. A torch.Tensor with shape (cfg["batch_size"], 3, IMAGE_HEIGHT, IMAGE_WIDTH)
-            Output:
-                yhat: Logits. A torch.Tensor with shape (cfg["batch_size"], 2)
-        """
-        return self.model(x)
-
-
-class ResNeXtCNN(nn.Module):
-    def __init__(self, cfg):
-        super().__init__()
-        self.cfg = cfg
-        self.model = models.resnext50_32x4d(pretrained=True)
         for param in self.model.parameters():
             param.requires_grad = False
         for param in self.model.layer4.parameters():
@@ -350,10 +333,8 @@ class ResNeXtCNN(nn.Module):
 def get_model(cfg: Dict[str, Any]) -> nn.Module:
     if cfg["model_name"] == "baseline_cnn":
         return BaselineCNN(cfg).to(cfg["device"])
-    elif cfg["model_name"] == "resnet_cnn":
+    elif cfg["model_name"] in ["resnet18_cnn", "resnext50_cnn"]:
         return ResNetCNN(cfg).to(cfg["device"])
-    elif cfg["model_name"] == "resnext_cnn":
-        return ResNeXtCNN(cfg).to(cfg["device"])
     else:
         raise Exception(f"Not a valid model {model}.")
 
@@ -395,7 +376,9 @@ def get_train_transforms(cfg: Dict[str, Any]) -> transforms.transforms.Compose:
         "horizontal_flip": transforms.RandomHorizontalFlip(p=0.5),
         "vertical_flip": transforms.RandomVerticalFlip(p=0.5),
         "perspective": transforms.RandomPerspective(distortion_scale=0.25, p=0.5),
-        "color_jitter": transforms.ColorJitter(),
+        "color_jitter": transforms.ColorJitter(
+            brightness=0.4, contrast=0.4, saturation=0.4, hue=0.4
+        ),
         "rotate": transforms.RandomRotation(degrees=30),
     }
     train_transforms = [transforms.ToTensor()]
@@ -456,7 +439,8 @@ def save_shap_feature_attributions(
     e = shap.DeepExplainer(model, train_images)
     shap_values = e.shap_values(test_images)
 
-    test_images = unnormalize_images(test_images)  # for visualization
+    if cfg["normalize"]:
+        test_images = unnormalize_images(test_images)  # for visualization
 
     shap_numpy = [np.swapaxes(np.swapaxes(s, 1, -1), 1, 2) for s in shap_values]
     test_numpy = np.swapaxes(np.swapaxes(test_images.numpy(), 1, -1), 1, 2)
@@ -486,7 +470,7 @@ def main() -> None:
     model_name = cfg["model_name"]
     if model_name == "baseline_cnn":
         cfg["image_size"] = 128
-    elif model_name in ["resnet_cnn", "resnext_cnn"]:
+    elif model_name in ["resnet18_cnn", "resnext50_cnn"]:
         cfg["image_size"] = 224
     else:
         raise Exception(f"Not a valid model_name {model_name}.")
@@ -577,7 +561,7 @@ def main() -> None:
     model = load_checkpoint(cfg=cfg, logger=logger)
 
     if (
-        cfg["model_name"] != "resnext_cnn"
+        cfg["model_name"] != "resnext50_cnn"
     ):  # Shap gives an error for resnext architecture.
         save_shap_feature_attributions(
             cfg=cfg,
