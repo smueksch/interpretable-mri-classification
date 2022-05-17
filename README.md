@@ -40,6 +40,12 @@ bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name baseline_c
 python task3.py
 ```
 
+Run the following command for the `RuleFit` experiment:
+
+```sh
+python task3_rules.py --retrain
+```
+
 # Optional Task
 
 ```bash
