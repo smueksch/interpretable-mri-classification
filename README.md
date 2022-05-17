@@ -41,9 +41,10 @@ python task3.py
 ```
 
 Run the following command for the `RuleFit` experiment:
+N.B.: We encountered some issues with non-reproducibility in the rulefit package. We have hence provided a trained model so that our results can be reproduced.
 
 ```sh
-python task3_rules.py --retrain
+python task3_rules.py
 ```
 
 # Optional Task

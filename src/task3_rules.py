@@ -2,6 +2,7 @@ import os
 import pprint
 from argparse import ArgumentParser
 import pickle
+from pathlib import Path
 
 from typing import Dict, Any, Tuple
 
@@ -69,9 +70,9 @@ class Task3RuleFit:
         self.logger = init_logger(path_to_log=build_log_file_path(self.cfg))
         self.logger.info(pprint.pformat(self.cfg, indent=4))
 
-        self.model_path = os.path.join(
-            build_checkpoints_path(self.cfg), "rulefit.pickle"
-        )
+        model_dir = os.path.join(Path(self.cfg["data"]).parent, "models")
+        os.makedirs(model_dir, exist_ok=True)
+        self.model_path = os.path.join(model_dir, "rulefit.pickle")
 
         self.load_dataset()
 
@@ -106,17 +107,14 @@ class Task3RuleFit:
         """Train RuleFit classifier based on given configuration."""
         rulefit = RuleFit(
             tree_generator=RandomForestClassifier(
-                n_estimators=self.cfg["n_estimators"],
-                random_state=self.cfg["seed"],
+                n_estimators=self.cfg["n_estimators"], random_state=self.cfg["seed"],
             ),
             rfmode="classify",
             random_state=self.cfg["seed"],
         )
         X_train_valid, y_train_valid = self.combine_train_valid()
         rulefit.fit(
-            X_train_valid,
-            y_train_valid,
-            feature_names=self.X_train.columns,
+            X_train_valid, y_train_valid, feature_names=self.X_train.columns,
         )
         save_rulefit_classifier(rulefit=rulefit, model_path=self.model_path)
         return rulefit
