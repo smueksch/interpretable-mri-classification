@@ -16,8 +16,6 @@ from utils import set_seeds, init_id, init_argument_parser, init_logger
 from data import get_radiomics_dataset
 
 
-
-
 def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
     """Add task-specific CLI arguments to a basic CLI argument parser."""
     # TODO: Add task-specific CLI arguments here.
