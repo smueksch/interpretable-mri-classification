@@ -13,34 +13,19 @@ from sklearn.utils.class_weight import compute_class_weight
 
 
 def get_img_dataset(
-    data_dir: str, logger: logging.Logger, transform=None
+    data_dir: str,
+    logger: logging.Logger,
+    train_transforms: transforms.transforms.Compose,
+    test_transforms: transforms.transforms.Compose,
 ) -> Tuple[
     torch.utils.data.dataset.Subset,
     torch.utils.data.dataset.Subset,
     torch.utils.data.dataset.Subset,
 ]:
-    # Define data transform
-    train_transform = []
-    if transform is not None:
-        train_transform += transform
-    train_transform += [
-        transforms.Resize(128),  # resize shortest side to 128 pixels
-        transforms.CenterCrop(128),  # crop longest side to 128 pixels at center
-        transforms.ToTensor(),  # convert PIL image to tensor
-    ]
-    train_transform = transforms.Compose(train_transform)
-    test_transform = transforms.Compose(
-        [
-            transforms.Resize(128),  # resize shortest side to 128 pixels
-            transforms.CenterCrop(128),  # crop longest side to 128 pixels at center
-            transforms.ToTensor(),  # convert PIL image to tensor
-        ]
-    )
-
     # Initialize train/test sets
     data_path = Path(data_dir)
-    train_dataset = ImageFolder(data_path, transform=train_transform)
-    test_dataset = ImageFolder(data_path, transform=test_transform)
+    train_dataset = ImageFolder(data_path, transform=train_transforms)
+    test_dataset = ImageFolder(data_path, transform=test_transforms)
     classes = train_dataset.find_classes(data_path)[1]
     logger.info(
         "Loaded samples into dataset with label "
@@ -50,18 +35,17 @@ def get_img_dataset(
     # Split dataset into train/test sets and stratify over labels to balance
     # datasets with set seed
     # DO NOT CHANGE THE SEED
-    generator = torch.Generator().manual_seed(390397)
     train_len = int(0.8 * len(train_dataset))
     test_len = int((len(train_dataset) - train_len) / 2)
     train_dataset = random_split(
         dataset=train_dataset,
         lengths=[train_len, test_len, test_len],
-        generator=generator,
+        generator=torch.Generator().manual_seed(390397),
     )[0]
     val_dataset, test_dataset = random_split(
         dataset=test_dataset,
         lengths=[train_len, test_len, test_len],
-        generator=generator,
+        generator=torch.Generator().manual_seed(390397),
     )[1:]
 
     return train_dataset, val_dataset, test_dataset
@@ -71,7 +55,8 @@ def get_img_data_loaders(
     cfg: dict,
     data_dir: str,
     logger: logging.Logger,
-    additional_train_transforms=None,
+    train_transforms: transforms.transforms.Compose,
+    test_transforms: transforms.transforms.Compose,
     shuffle_train: bool = True,
 ) -> Tuple[
     torch.utils.data.DataLoader,
@@ -79,9 +64,11 @@ def get_img_data_loaders(
     torch.utils.data.DataLoader,
     torch.Tensor,
 ]:
-    def get_img_data_loaders_helper(dataset, shuffle):
+    def get_img_data_loaders_helper(
+        dataset: torch.utils.data.dataset.Subset, shuffle: bool
+    ) -> torch.utils.data.DataLoader:
         return torch.utils.data.DataLoader(
-            train_dataset,
+            dataset,
             batch_size=cfg["batch_size"],
             shuffle=shuffle,
             num_workers=cfg["num_workers"],
@@ -90,7 +77,10 @@ def get_img_data_loaders(
         )
 
     train_dataset, val_dataset, test_dataset = get_img_dataset(
-        data_dir=data_dir, logger=logger, transform=additional_train_transforms
+        data_dir=data_dir,
+        logger=logger,
+        train_transforms=train_transforms,
+        test_transforms=test_transforms,
     )
 
     # compute class weights
