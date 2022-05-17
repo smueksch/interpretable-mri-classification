@@ -100,7 +100,7 @@ dependencies:
   - qtconsole=4.7.7=py_0
   - qtpy=1.9.0=py_0
   - readline=8.0=h7b6447c_0
-  - scikit-learn=0.23.2=py38h0573a6f_0
+  # - scikit-learn=0.23.2=py38h0573a6f_0
   - scipy=1.5.2=py38habc2bb6_0
   - send2trash=1.5.0=py38_0
   - setuptools=50.3.0=py38hb0f4dca_1
@@ -129,3 +129,4 @@ dependencies:
     - rulefit==0.3.1
     - shap==0.40.0
     - matplotlib==3.5.2
+    - scikit-learn==1.0.2
