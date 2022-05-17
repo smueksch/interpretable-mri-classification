@@ -73,10 +73,7 @@ def init_argument_parser() -> argparse.ArgumentParser:
     """Initialize basic CLI argument parser."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--data",
-        type=str,
-        default="../data",
-        help="Parent directory for datasets.",
+        "--data", type=str, default="../data", help="Parent directory for datasets.",
     )
     parser.add_argument(
         "--checkpoints",
@@ -85,10 +82,7 @@ def init_argument_parser() -> argparse.ArgumentParser:
         help="Parent directory for model states, results and logging.",
     )
     parser.add_argument(
-        "--id",
-        type=str,
-        default=None,
-        help="Unique experiment ID.",
+        "--id", type=str, default=None, help="Unique experiment ID.",
     )
     parser.add_argument(
         "--seed", type=int, default=42, help="Random seed for reproducibility."
