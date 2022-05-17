@@ -3,8 +3,6 @@
 # VS Code
 .vscode
 
-plots/
-
 # Checkpoints with model states and logs.
 checkpoints/
 
