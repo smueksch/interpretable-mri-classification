@@ -3,14 +3,13 @@ import pprint
 from argparse import ArgumentParser
 import pickle
 
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, Tuple
 
 import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from rulefit import RuleFit
-from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
-from xgboost.sklearn import XGBClassifier
 
 from utils import set_seeds, init_id, init_argument_parser, init_logger
 from data import get_radiomics_dataset
@@ -21,45 +20,15 @@ def extend_argument_parser(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--n_estimators",
         type=int,
-        default=300,
+        default=500,
         help="Number of gradient boosted trees.",
-    )
-    parser.add_argument(
-        "--max_depth",
-        type=int,
-        default=4,
-        help="Max. tree depth of base learners.",
-    )
-    parser.add_argument(
-        "--lr",
-        type=float,
-        default=0.01,
-        help="Boosting learning rate.",
-    )
-    parser.add_argument(
-        "--gamma",
-        type=float,
-        default=0.0,
-        help="Min. loss to make further partition on leaf node.",
-    )
-    parser.add_argument(
-        "--subsample",
-        type=float,
-        default=0.9,
-        help="Subsample ratio of training instance.",
-    )
-    parser.add_argument(
-        "--grid_search",
-        action="store_true",
-        help="If set, hyperparameter grid search for XGBoost classifier will"
-        + " be performed.",
     )
     return parser
 
 
 def build_checkpoints_path(cfg: Dict[str, Any]) -> str:
     """Construct path to task 1 checkpoints folder from configuration."""
-    return os.path.join(cfg["checkpoints"], "task1")
+    return os.path.join(cfg["checkpoints"], "task3")
 
 
 def build_log_file_path(cfg: Dict[str, Any]) -> str:
@@ -70,34 +39,24 @@ def build_log_file_path(cfg: Dict[str, Any]) -> str:
     return file_path
 
 
-def select_important_features(
-    features: List[str], feature_importances: List[float]
-) -> Dict[str, float]:
-    assert len(features) == len(
-        feature_importances
-    ), "Need as many feature importances as features!"
-    important_features = zip(features, feature_importances)
-    return {t[0]: t[1] for t in important_features if t[1] > 0.0}
-
-
-def save_xgb_classifier(xgbc: XGBClassifier, model_path: str) -> None:
-    """Save XGBoost classifier to given path."""
+def save_rulefit_classifier(rulefit: RuleFit, model_path: str) -> None:
+    """Save RuleFit classifier to given path."""
     with open(model_path, "wb") as f:
-        pickle.dump(obj=xgbc, file=f, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(obj=rulefit, file=f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def load_xgb_classifier(model_path: str) -> XGBClassifier:
-    """Load XGBoost classifier from given path."""
+def load_rulefit_classifier(model_path: str) -> RuleFit:
+    """Load RuleFit classifier from given path."""
     with open(model_path, "rb") as f:
         model = pickle.load(file=f)
     return model
 
 
-class Task1:
-    """Task 1 experiments."""
+class Task3RuleFit:
+    """Task 3 RuleFit experiments."""
 
     def __init__(self) -> None:
-        """Set up task 1 experiments."""
+        """Set up task 3 RuleFit experiments."""
         arg_parser = init_argument_parser()
         arg_parser = extend_argument_parser(arg_parser)
 
@@ -111,7 +70,7 @@ class Task1:
         self.logger.info(pprint.pformat(self.cfg, indent=4))
 
         self.model_path = os.path.join(
-            build_checkpoints_path(self.cfg), "xgbc.pickle"
+            build_checkpoints_path(self.cfg), "rulefit.pickle"
         )
 
         self.load_dataset()
@@ -143,110 +102,42 @@ class Task1:
         y_train_valid = np.concatenate((self.y_train, self.y_valid))
         return X_train_valid, y_train_valid
 
-    def search_grid(self) -> GridSearchCV:
-        """Perform grid search over XGBoost hyperparamters, return result."""
-        parameter_grid = {
-            "n_estimators": [
-                100,
-                200,
-                300,
-                400,
-                500,
-                600,
-                700,
-                800,
-                900,
-                1000,
-            ],
-            "max_depth": [3, 4, 5],
-            "learning_rate": [0.01, 0.1],
-            "gamma": [0.0, 0.25, 0.5, 0.75, 1.0],
-            "subsample": [0.7, 0.8, 0.9, 1.0],
-        }
-
-        X_train_valid, y_train_valid = self.combine_train_valid()
-        self.logger.info("X_train_valid shape: %s", self.X_train.shape)
-        self.logger.info("y_train_valid shape: %s", self.y_train.shape)
-
-        xgbc = XGBClassifier(random_state=self.cfg["seed"])
-
-        grid_search = GridSearchCV(
-            xgbc,
-            parameter_grid,
-            scoring="balanced_accuracy",
-            n_jobs=-1,
-            refit=True,
-            cv=5,
-            verbose=4,
-            return_train_score=True,
-        )
-
-        grid_search.fit(X_train_valid, y_train_valid)
-        return grid_search
-
-    def train_xgb_classifier(self) -> XGBClassifier:
-        """Train XGBoost classifier based on given configuration."""
-        if self.cfg["grid_search"]:
-
-            self.logger.info("Starting grid search for XGBoost Classifier...")
-            grid_search = self.search_grid()
-            self.logger.info("Grid search complete!")
-
-            xgbc = grid_search.best_estimator_
-            save_xgb_classifier(xgbc=xgbc, model_path=self.model_path)
-
-            self.logger.info(
-                "Best hyperparameter settings: %s",
-                pprint.pformat(grid_search.best_params_, indent=4),
-            )
-        else:
-            # xgbc = XGBClassifier(
-            #     n_estimators=self.cfg["n_estimators"],
-            #     max_depth=self.cfg["max_depth"],
-            #     learning_rate=self.cfg["lr"],
-            #     gamma=self.cfg["gamma"],
-            #     subsample=self.cfg["subsample"],
-            # )
-            rulefit = RuleFit(
-                tree_generator=RandomForestClassifier(
-                    n_estimators=500,
-                    random_state=self.cfg["seed"],
-                ),
-                rfmode="classify",
+    def train_rulefit_classifier(self) -> RuleFit:
+        """Train RuleFit classifier based on given configuration."""
+        rulefit = RuleFit(
+            tree_generator=RandomForestClassifier(
+                n_estimators=self.cfg["n_estimators"],
                 random_state=self.cfg["seed"],
-            )
-            X_train_valid, y_train_valid = self.combine_train_valid()
-            rulefit.fit(
-                X_train_valid,
-                y_train_valid,
-                feature_names=self.X_train.columns,
-            )
-            # xgbc.fit(X_train_valid, y_train_valid)
-            # save_xgb_classifier(xgbc=xgbc, model_path=self.model_path)
+            ),
+            rfmode="classify",
+            random_state=self.cfg["seed"],
+        )
+        X_train_valid, y_train_valid = self.combine_train_valid()
+        rulefit.fit(
+            X_train_valid,
+            y_train_valid,
+            feature_names=self.X_train.columns,
+        )
+        save_rulefit_classifier(rulefit=rulefit, model_path=self.model_path)
         return rulefit
 
-    def evaluate_xgb_classifier(self, rulefit: RuleFit) -> None:
-        # important_features = select_important_features(
-        #     self.X_train.columns.to_list(), xgbc.feature_importances_.tolist()
-        # )
+    def extract_rules(self, rulefit: RuleFit) -> pd.DataFrame:
+        """Extract a sorted list of rules according to support."""
+        rules = rulefit.get_rules()
+        # Remove pure variables.
+        rules = rules[rules["type"] != "linear"]
+        # Remove insignificant rules.
+        rules = rules[rules["coef"] != 0]
+        return rules.sort_values("support", ascending=False)
 
-        # self.logger.info(
-        #     "Important features (%d/%d): %s",
-        #     len(important_features),
-        #     len(self.X_train.columns),
-        #     pprint.pformat(important_features, indent=4),
-        # )
-
-        rules = rulefit.get_rules()  # Get the rules
-        rules = rules[
-            rules["type"] != "linear"
-        ]  # Eliminate the existing explanatory variables
-        rules = rules[rules["coef"] != 0]  # eliminate the insignificant rules
-        rules = rules.sort_values(
-            "support", ascending=False
-        )  # Sort the rules based on "support" value
+    def evaluate_rulefit_classifier(self, rulefit: RuleFit) -> None:
+        rules = self.extract_rules(rulefit)
         self.logger.info("Rules:\n%s", rules)
-        rules.to_csv("rules.csv")
+        rules_filename = os.path.join(
+            build_checkpoints_path(self.cfg), f"rules-{self.cfg['id']}.csv"
+        )
+        rules.to_csv(rules_filename)
+        self.logger.info("Saved rules as CSV to %s!", rules_filename)
 
         metrics = {
             "accuracy": accuracy_score,
@@ -271,15 +162,15 @@ class Task1:
             )
 
     def run(self) -> None:
-        """Run task 1."""
+        """Run task 3 RuleFit experiments."""
         if self.cfg["retrain"]:
-            xgbc = self.train_xgb_classifier()
+            rulefit = self.train_rulefit_classifier()
         else:
-            xgbc = load_xgb_classifier(self.model_path)
+            rulefit = load_rulefit_classifier(self.model_path)
 
-        self.evaluate_xgb_classifier(xgbc)
+        self.evaluate_rulefit_classifier(rulefit)
 
 
 if "__main__" == __name__:
-    task1 = Task1()
-    task1.run()
+    task3_rulefit = Task3RuleFit()
+    task3_rulefit.run()
