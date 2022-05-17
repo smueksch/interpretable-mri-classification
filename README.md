@@ -1,7 +1,6 @@
 # Environment
 
 In the root of this repository, run
-
 ```sh
 conda env create -f environment.yml
 ```
@@ -32,21 +31,24 @@ python task1.py --retrain --grid_search
 # Task 2
 
 ```bash
-python task2.py
+bsub -n 3 -W 24:00 -R "rusage[mem=8192]" python task2.py --model_name baseline_cnn
 ```
 
 # Task 3
 
-First, activate the environment:
-
-```sh
-conda activate ml4hc_project3
+```bash
+python task3.py
 ```
-
-then navigate to the `src` folder to run the remaining commands.
 
 Run the following command for the `RuleFit` experiment:
 
 ```sh
 python task3_rules.py --retrain
+```
+
+# Optional Task
+
+```bash
+chmod +x optional_task_commands.sh
+./optional_task_commands.sh
 ```

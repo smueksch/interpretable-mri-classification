@@ -111,7 +111,6 @@ dependencies:
   - testpath=0.4.4=py_0
   - threadpoolctl=2.1.0=pyh5ca1d4c_0
   - tk=8.6.10=hbc83047_0
-  # - torchvision=0.5.0=py38_cu101
   - tornado=6.0.4=py38h7b6447c_1
   - tqdm=4.63.1=pyhd8ed1ab_0
   - traitlets=5.0.5=py_0
@@ -124,7 +123,9 @@ dependencies:
   - zipp=3.3.1=py_0
   - zlib=1.2.11=h7b6447c_3
   - zstd=1.4.4=h0b5b093_3
-  - xgboost
+  - xgboost=1.5.0=py38h06a4308_1
   - pip:
     - torchvision==0.12.0
     - rulefit==0.3.1
+    - shap==0.40.0
+    - matplotlib==3.5.2
